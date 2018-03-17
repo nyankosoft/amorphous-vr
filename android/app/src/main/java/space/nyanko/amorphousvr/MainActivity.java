@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package com.gvr.ndktreasurehunt;
+package space.nyanko.amorphousvr;
 
 import android.app.Activity;
 import android.content.Context;

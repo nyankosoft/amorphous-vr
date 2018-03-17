@@ -24,7 +24,7 @@
 
 #define JNI_METHOD(return_type, method_name) \
   JNIEXPORT return_type JNICALL              \
-      Java_com_gvr_ndktreasurehunt_MainActivity_##method_name
+      Java_space_nyanko_amorphousvr_MainActivity_##method_name
 
 namespace {
 

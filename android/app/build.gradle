@@ -14,7 +14,7 @@
 // Also are these what give the java source the necessary packages?
 
 task extractAudioSo(type: Copy) {
-    from zipTree("${project.rootDir}/libraries/sdk-audio-1.120.0.aar")
+    from zipTree("${project.rootDir}/libraries/sdk-audio-1.130.0.aar")
     into "${project.rootDir}/libraries/"
     include "jni/**/libgvr_audio.so"
 
@@ -23,7 +23,7 @@ task extractAudioSo(type: Copy) {
 }
 
 task extractGvrSo(type: Copy) {
-    from zipTree("${project.rootDir}/libraries/sdk-base-1.120.0.aar")
+    from zipTree("${project.rootDir}/libraries/sdk-base-1.130.0.aar")
     into "${project.rootDir}/libraries/"
     include "jni/**/libgvr.so"
 }
@@ -73,7 +73,7 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 26
     defaultConfig {
-        applicationId "com.gvr.ndktreasurehunt"
+        applicationId "space.nyanko.amorphous"
         minSdkVersion 19
         targetSdkVersion 26
         //multiDexEnabled true
@@ -181,8 +181,8 @@ dependencies {
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
 
-    compile 'com.google.vr:sdk-audio:1.120.0'
-    compile 'com.google.vr:sdk-base:1.120.0'
+    compile 'com.google.vr:sdk-audio:1.130.0'
+    compile 'com.google.vr:sdk-base:1.130.0'
     //compile 'com.android.support:support-core-utils:26.1.0'
 }
 
