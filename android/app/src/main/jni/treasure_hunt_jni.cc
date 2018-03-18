@@ -14,6 +14,9 @@
  */
 
 #include <android/log.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+#include <android/keycodes.h> // For turning on/off the rendering of the floor (gDrawFloor). This include directive is meant to be temporary.
 #include <jni.h>
 
 #include <memory>
@@ -21,6 +24,23 @@
 #include "treasure_hunt_renderer.h"  // NOLINT
 #include "vr/gvr/capi/include/gvr.h"
 #include "vr/gvr/capi/include/gvr_audio.h"
+#include "amorphous/App/Android/GvrAppBase.hpp"
+#include "amorphous/Input/Android/AndroidKeyboard.hpp"
+#include "amorphous/Graphics/GraphicsResources.hpp"
+//#include "amorphous/Support/Log/DefaultLogAux.hpp"
+
+extern JavaVM *gJavaVM;
+
+extern bool gDrawCube;
+extern bool gDrawFloor;
+
+static inline amorphous::AndroidKeyboard& get_kbd() {
+  static amorphous::AndroidKeyboard s_kbd;
+  return s_kbd;
+}
+
+// This causes crash at startup (app fails to create the vr.log log file).
+//static amorphous::AndroidKeyboard kbd;
 
 #define JNI_METHOD(return_type, method_name) \
   JNIEXPORT return_type JNICALL              \
@@ -42,6 +62,9 @@ extern "C" {
 JNI_METHOD(jlong, nativeCreateRenderer)
 (JNIEnv *env, jclass clazz, jobject class_loader, jobject android_context,
  jlong native_gvr_api) {
+
+  env->GetJavaVM(&gJavaVM);
+
   std::unique_ptr<gvr::AudioApi> audio_context(new gvr::AudioApi);
   audio_context->Init(env, android_context, class_loader,
                       GVR_AUDIO_RENDERING_BINAURAL_HIGH_QUALITY);
@@ -79,6 +102,43 @@ JNI_METHOD(void, nativeOnPause)
 JNI_METHOD(void, nativeOnResume)
 (JNIEnv *env, jobject obj, jlong native_treasure_hunt) {
   native(native_treasure_hunt)->OnResume();
+}
+
+extern std::unique_ptr<amorphous::GvrAppBase> kMyApp;
+
+JNI_METHOD(void, nativeOnKeyDown)
+(JNIEnv *env, jobject obj, jlong native_treasure_hunt, jint key_code) {
+  //native(native_treasure_hunt)->OnKeyDown((int)key_code);
+
+  get_kbd().OnKeyDown((int)key_code);
+
+  if( (int)key_code == AKEYCODE_F6
+   || (int)key_code == AKEYCODE_6
+   || (int)key_code == AKEYCODE_L ) {
+    gDrawFloor = !gDrawFloor;
+    //amorphous::LOG_PRINTF(("gDrawFloor: %d",(int)gDrawFloor));
+   }
+
+  //if(::kMyApp)
+  //  ::kMyApp->OnKeyDown();
+}
+
+JNI_METHOD(void, nativeOnKeyUp)
+(JNIEnv *env, jobject obj, jlong native_treasure_hunt, jint key_code) {
+  //native(native_treasure_hunt)->OnKeyUp((int)key_code);
+
+  get_kbd().OnKeyUp((int)key_code);
+
+  //if(::kMyApp)
+  //  ::kMyApp->OnKeyDown();
+}
+
+JNI_METHOD(void, nativeInitAssetManager)
+(JNIEnv *env, jobject obj, jobject assetManager) {
+
+  AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
+
+  amorphous::SetAssetManager(mgr);
 }
 
 }  // extern "C"
