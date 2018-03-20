@@ -141,6 +141,12 @@ void MyGvrApp::HandleInput( const amorphous::InputData& input ) {
 
 	switch(input.iGICode) {
 	case 'I':
+	case GIC_GPD_BUTTON_00:
+	case GIC_GPD_BUTTON_01:
+	case GIC_GPD_BUTTON_02:
+	case GIC_GPD_BUTTON_03:
+	case GIC_GPD_BUTTON_04:
+	case GIC_GPD_BUTTON_05:
 		if( input.iType == ITYPE_KEY_PRESSED ) {
 			m_Lighting = !m_Lighting;
 			InitShader();

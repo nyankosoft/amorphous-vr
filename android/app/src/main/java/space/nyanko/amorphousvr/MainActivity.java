@@ -16,13 +16,19 @@
 package space.nyanko.amorphousvr;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Vibrator;
+import android.os.Environment;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.Manifest;
+import android.support.v4.app.ActivityCompat;
+import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
 import com.google.vr.ndk.base.AndroidCompat;
 import com.google.vr.ndk.base.GvrLayout;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -75,6 +81,11 @@ public class MainActivity extends Activity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+
+    // Check if we have write permission
+    verifyStoragePermissions(this);
+
+    initAssetManager();
 
     // Ensure fullscreen immersion.
     setImmersiveSticky();
@@ -205,6 +216,18 @@ public class MainActivity extends Activity {
     return super.dispatchKeyEvent(event);
   }
 
+  @Override
+  public boolean onKeyDown(int keyCode, KeyEvent event) {
+    nativeOnKeyDown(nativeTreasureHuntRenderer,keyCode);
+    return super.onKeyDown(keyCode,event);
+  }
+
+  @Override
+  public boolean onKeyUp(int keyCode, KeyEvent event) {
+    nativeOnKeyUp(nativeTreasureHuntRenderer,keyCode);
+    return super.onKeyUp(keyCode,event);
+  }
+
   private void setImmersiveSticky() {
     getWindow()
         .getDecorView()
@@ -216,6 +239,45 @@ public class MainActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
   }
+  
+  // Copied and pasted from https://stackoverflow.com/questions/16360763/permission-denied-when-creating-new-file-on-external-storage
+
+  // Storage Permissions
+  private static final int REQUEST_EXTERNAL_STORAGE = 1;
+  private static String[] PERMISSIONS_STORAGE = {
+          Manifest.permission.READ_EXTERNAL_STORAGE,
+          Manifest.permission.WRITE_EXTERNAL_STORAGE
+  };
+  
+  /**
+   * Checks if the app has permission to write to device storage
+   *
+   * If the app does not has permission then the user will be prompted to grant permissions
+   *
+   * @param activity
+   */
+  public static void verifyStoragePermissions(Activity activity) {
+      // Check if we have write permission
+      int permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+  
+      if (permission != PackageManager.PERMISSION_GRANTED) {
+          // We don't have permission so prompt the user
+          ActivityCompat.requestPermissions(
+                  activity,
+                  PERMISSIONS_STORAGE,
+                  REQUEST_EXTERNAL_STORAGE
+          );
+      }
+  }
+
+private void initAssetManager() {
+  //AAssetManager*mgr;
+  //AAssetManager *mgr = AAssetManager_fromJava(env, assetManager);
+  //AAsset* asset=AAssetManager_open(mgr,"Engine256.raw",AASSET_MODE_BUFFER);
+
+  AssetManager mgr = this.getAssets();
+  nativeInitAssetManager(mgr);
+}
 
   private native long nativeCreateRenderer(
       ClassLoader appClassLoader, Context context, long nativeGvrContext);
@@ -225,4 +287,7 @@ public class MainActivity extends Activity {
   private native void nativeOnTriggerEvent(long nativeTreasureHuntRenderer);
   private native void nativeOnPause(long nativeTreasureHuntRenderer);
   private native void nativeOnResume(long nativeTreasureHuntRenderer);
+  private native void nativeOnKeyDown(long nativeTreasureHuntRenderer,int keyCode);
+  private native void nativeOnKeyUp(long nativeTreasureHuntRenderer,int keyCode);
+  private native void nativeInitAssetManager(AssetManager mgr);
 }
