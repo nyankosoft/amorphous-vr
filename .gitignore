@@ -1,6 +1,19 @@
+# Android Studio configuration.
 *.iml
+
+# Gradle build.
+.gradle
+.externalNativeBuild
 build
+libraries/jni
+
+# User configuration.
+local.properties
+
+# OS configurations.
+.DS_Store
+
+# Other miscellaneous ignore patterns for amorphous-vr
 amorphous
 build.log
 logs
-libraries/jni
