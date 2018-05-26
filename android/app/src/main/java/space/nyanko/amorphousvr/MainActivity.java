@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package com.google.vr.ndk.samples.treasurehunt;
+package space.nyanko.amorphousvr;
 
 import android.app.Activity;
 import android.content.Context;

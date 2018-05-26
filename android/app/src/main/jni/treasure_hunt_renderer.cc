@@ -16,6 +16,13 @@
 #include "treasure_hunt_renderer.h"  // NOLINT
 #include "treasure_hunt_shaders.h"  // NOLINT
 
+#include "MyGvrApp.hpp"
+#include "amorphous/Support/Log/DefaultLogAux.hpp"
+#include "amorphous/Support/Macro.h"
+#include "amorphous/Graphics/GraphicsComponentCollector.hpp"
+#include "amorphous/Graphics/GraphicsResourceManager.hpp"
+#include "amorphous/Graphics/AsyncResourceLoader.hpp"
+
 #include <android/log.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -23,6 +30,12 @@
 #include <random>
 
 #include "vr/gvr/capi/include/gvr_version.h"
+
+using namespace amorphous;
+
+extern bool gDrawCube;
+extern bool gDrawFloor;
+
 
 #define LOG_TAG "TreasureHuntCPP"
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
@@ -35,6 +48,9 @@
   }
 
 namespace {
+
+std::unique_ptr<amorphous::GvrAppBase> kMyApp;
+
 static const float kZNear = 0.01f;
 static const float kZFar = 10.0f;
 
@@ -59,6 +75,17 @@ static const float kAngleLimit = 0.2f;
 // Sound file in APK assets.
 static const char* kObjectSoundFile = "cube_sound.wav";
 static const char* kSuccessSoundFile = "success.wav";
+
+static std::string to_string(const std::array<float, 16>& myarray) {
+  std::string str;
+  char a[16];
+  for( auto f : myarray ) {
+    sprintf(a,"%f",f);
+    str += a;
+    str += ", ";
+  }
+  return str;
+}
 
 // Convert a GVR matrix to an array of floats suitable for passing to OpenGL.
 static std::array<float, 16> MatrixToGLArray(const gvr::Mat4f& matrix) {
@@ -296,6 +323,11 @@ TreasureHuntRenderer::TreasureHuntRenderer(
 }
 
 TreasureHuntRenderer::~TreasureHuntRenderer() {
+
+  amorphous::LOG_PRINT(("dtor"));
+
+  amorphous::GraphicsComponentCollector::Get()->ReleaseGraphicsResources();
+
   // Join the audio initialization thread in case it still exists.
   if (audio_initialization_thread_.joinable()) {
     audio_initialization_thread_.join();
@@ -304,7 +336,7 @@ TreasureHuntRenderer::~TreasureHuntRenderer() {
 
 void TreasureHuntRenderer::InitializeGl() {
   gvr_api_->InitializeGl();
-  multiview_enabled_ = gvr_api_->IsFeatureSupported(GVR_FEATURE_MULTIVIEW);
+  multiview_enabled_ = false;//gvr_api_->IsFeatureSupported(GVR_FEATURE_MULTIVIEW);
   LOGD(multiview_enabled_ ? "Using multiview." : "Not using multiview.");
 
   int index = multiview_enabled_ ? 1 : 0;
@@ -372,6 +404,7 @@ void TreasureHuntRenderer::InitializeGl() {
   CheckGLError("Reticle program params");
 
   // Object first appears directly in front of user.
+  // (World transforms of the objects)
   model_cube_ = {{{1.0f, 0.0f, 0.0f, 0.0f},
                   {0.0f, 0.707f, -0.707f, 0.0f},
                   {0.0f, 0.707f, 0.707f, -object_distance_},
@@ -418,6 +451,29 @@ void TreasureHuntRenderer::InitializeGl() {
   if (!audio_initialization_thread_.joinable()) {
     audio_initialization_thread_ =
         std::thread(&TreasureHuntRenderer::LoadAndPlayCubeSound, this);
+  }
+
+  FILE *fp = fopen("/storage/emulated/0/data/local/myfile.txt","w"); // No success
+  // FILE *fp = fopen("/storage/3230-6232/myfile.txt","w"); // No success
+  //FILE *fp = fopen("/storage/3230-6232/work/myfile.txt","w");
+  if(fp) {
+    fprintf(fp,"Hello, Nyanko.\n");
+    fclose(fp);
+  }
+
+  // Every time MainActivity.onCreate() is called the render thread is re-created
+  // with a new thread id, so we need to register the new id.
+  amorphous::SetCurrentThreadAsRenderThread();
+
+  if( !kMyApp ) {
+    kMyApp.reset( new MyGvrApp );
+    kMyApp->InitBase();
+    kMyApp->Init();
+  }
+  else {
+    // kMyApp already exists; we got here by a repeated call of onCreate()
+    amorphous::GraphicsParameters params;
+    amorphous::GraphicsComponentCollector::Get()->LoadGraphicsResources(params);
   }
 }
 
@@ -480,6 +536,11 @@ void TreasureHuntRenderer::UpdateReticlePosition() {
 }
 
 void TreasureHuntRenderer::DrawFrame() {
+
+  amorphous::GlobalTimer().UpdateFrameTime();
+  float dt = amorphous::GlobalTimer().GetFrameTime();
+  kMyApp->Update(dt);
+  
   PrepareFramebuffer();
   gvr::Frame frame = swapchain_->AcquireFrame();
 
@@ -490,10 +551,12 @@ void TreasureHuntRenderer::DrawFrame() {
     &viewport_left_,
     &viewport_right_,
   };
+  
+  // API reference: https://developers.google.com/vr/ios/ndk/reference/class/gvr/gvr-api#getheadspacefromstartspacerotation
   head_view_ = gvr_api_->GetHeadSpaceFromStartSpaceTransform(target_time);
-  viewport_list_->SetToRecommendedBufferViewports();
+  viewport_list_->SetToRecommendedBufferViewports(); // https://developers.google.com/vr/ios/ndk/reference/group/base#group__base_1ga21cff221055d2b7ed7c48a55b4a0b1eb
 
-  gvr::BufferViewport reticle_viewport = gvr_api_->CreateBufferViewport();
+  gvr::BufferViewport reticle_viewport = gvr_api_->CreateBufferViewport(); // https://developers.google.com/vr/ios/ndk/reference/class/gvr/gvr-api#createbufferviewport
   reticle_viewport.SetSourceBufferIndex(1);
   if (gvr_viewer_type_ == GVR_VIEWER_TYPE_CARDBOARD) {
     // Do not reproject the reticle if it's head-locked.
@@ -513,6 +576,8 @@ void TreasureHuntRenderer::DrawFrame() {
                    {0.0f, 1.0f, 0.0f, ground_y},
                    {0.0f, 0.0f, 1.0f, 0.0f},
                    {0.0f, 0.0f, 0.0f, 1.0f}}};
+
+  gvr::Mat4f perspectives[2];
 
   gvr::Mat4f eye_views[2];
   for (int eye = 0; eye < 2; ++eye) {
@@ -534,11 +599,16 @@ void TreasureHuntRenderer::DrawFrame() {
     // latter two viewports are for the reticle (one for each eye).
     viewport_list_->SetBufferViewport(2 + eye, reticle_viewport);
 
+	// model_cube_, model_floor_: world transforms
+	// eye_views[eye]: view transform, i.e. world as seen from left/right eye.
+	// modelview_cube_[eye] and modelview_floor_[eye] transform vertices
+	// from model space to view space.
     modelview_cube_[eye] = MatrixMul(eye_views[eye], model_cube_);
     modelview_floor_[eye] = MatrixMul(eye_views[eye], model_floor_);
     const gvr_rectf fov = viewport[eye]->GetSourceFov();
     const gvr::Mat4f perspective =
         PerspectiveMatrixFromView(fov, kZNear, kZFar);
+    perspectives[eye] = perspective;
     modelview_projection_cube_[eye] =
         MatrixMul(perspective, modelview_cube_[eye]);
     modelview_projection_floor_[eye] =
@@ -560,7 +630,18 @@ void TreasureHuntRenderer::DrawFrame() {
     DrawWorld(kMultiview);
   } else {
     DrawWorld(kLeftView);
+
+    //LOG_PRINTF(("Rendering left eye view"));
+    kMyApp->SetViewTransform(MatrixToGLArray(eye_views[0]));
+    kMyApp->SetProjectionTransform(MatrixToGLArray(perspectives[0]));
+    kMyApp->RenderBase();
+
     DrawWorld(kRightView);
+    
+    //LOG_PRINTF(("Rendering right eye view"));
+    kMyApp->SetViewTransform(MatrixToGLArray(eye_views[1]));
+    kMyApp->SetProjectionTransform(MatrixToGLArray(perspectives[1]));
+    kMyApp->RenderBase();
   }
   frame.Unbind();
 
@@ -576,11 +657,19 @@ void TreasureHuntRenderer::DrawFrame() {
 
   CheckGLError("onDrawFrame");
 
+  amorphous::GetAsyncResourceLoader().ProcessGraphicsDeviceRequests();
+
   // Update audio head rotation in audio API.
   gvr_audio_api_->SetHeadPose(head_view_);
   gvr_audio_api_->Update();
 }
 
+/**
+ * \brief Resizes the framebuffer to one with the desired size if necessary.
+ *
+ * gvr::SwapChain::ResizeBuffer() is called only if resizing of the framebuffer
+ * is necessary.
+ */
 void TreasureHuntRenderer::PrepareFramebuffer() {
   // Because we are using 2X MSAA, we can render to half as many pixels and
   // achieve similar quality.
@@ -619,6 +708,18 @@ void TreasureHuntRenderer::OnResume() {
   gvr_audio_api_->Resume();
   gvr_viewer_type_ = gvr_api_->GetViewerType();
   ResumeControllerApiAsNeeded();
+}
+
+void TreasureHuntRenderer::OnKeyDown(int key_code) {
+  amorphous::LOG_PRINTF(("A key was pressed: %d",key_code));
+
+  kMyApp->OnKeyDown(key_code);
+}
+
+void TreasureHuntRenderer::OnKeyUp(int key_code) {
+  amorphous::LOG_PRINTF(("A key was released: %d",key_code));
+
+  kMyApp->OnKeyUp(key_code);
 }
 
 /**
@@ -662,8 +763,13 @@ void TreasureHuntRenderer::DrawWorld(ViewType view) {
     glViewport(pixel_rect.left, pixel_rect.bottom,
                pixel_rect.right - pixel_rect.left,
                pixel_rect.top - pixel_rect.bottom);
+
+    ONCE( amorphous::LOG_PRINTF(("pixel_rect ltrb: %d, %d, %d, %d", pixel_rect.left, pixel_rect.top, pixel_rect.right, pixel_rect.bottom)) );
   }
+
+  if(gDrawCube)
   DrawCube(view);
+  if(gDrawFloor)
   DrawFloor(view);
 }
 
@@ -684,6 +790,7 @@ void TreasureHuntRenderer::DrawCube(ViewType view) {
     glUniformMatrix4fv(
         cube_modelview_projection_param_, 1, GL_FALSE,
         MatrixToGLArray(modelview_projection_cube_[view]).data());
+    amorphous::LOG_PRINT( "modelview_projection_cube_: " + to_string(MatrixToGLArray(modelview_projection_cube_[view])) );
   }
 
   // Set the Model in the shader, used to calculate lighting
